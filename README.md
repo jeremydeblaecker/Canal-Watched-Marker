@@ -4,7 +4,7 @@
 
 Extension **Firefox (Manifest V3)** qui marque les programmes déjà regardés sur **CANAL+ / myCANAL**.
 
-Version actuelle : **1.5.4**
+Version actuelle : **1.6.0**
 
 ## Fonctionnalités
 
@@ -16,6 +16,9 @@ Version actuelle : **1.5.4**
 - 📥 Import d'un historique JSON provenant d'une ancienne installation.
 - 🟣 Import des films vus depuis une base Notion exportée en **CSV ou JSON**.
 - 💾 Export / restauration des données locales.
+- 🛟 Sauvegarde locale automatique avant import ou suppression d'historique.
+- 🔗 Index d'alias pour rattacher plusieurs représentations d'un même contenu.
+- ✅ Tests automatiques de la canonicalisation et du stockage.
 - 🔒 Données conservées localement dans `browser.storage.local`.
 
 Les données issues de Notion sont stockées séparément de l'historique CANAL+ afin de pouvoir les remplacer sans supprimer les contenus suivis directement par l'extension.
@@ -130,6 +133,8 @@ Canal-Watched-Marker/
 │   ├── icon48.png
 │   └── icon128.png
 ├── background.js
+├── core.js
+├── storage.js
 ├── content.js
 ├── content.css
 ├── import.html
@@ -156,6 +161,8 @@ Les fichiers JavaScript peuvent être vérifiés avec :
 
 ```bash
 node --check background.js
+node --check core.js
+node --check storage.js
 node --check content.js
 node --check import.js
 node --check notion.js
@@ -168,7 +175,13 @@ Et le manifeste avec :
 python -m json.tool manifest.json
 ```
 
-GitHub Actions exécute automatiquement ces vérifications sur les pushes et pull requests.
+Les tests unitaires s'exécutent avec :
+
+```bash
+node --test tests/*.test.js
+```
+
+GitHub Actions exécute automatiquement les vérifications de syntaxe et les tests sur les pushes et pull requests.
 
 ## Limites connues
 
