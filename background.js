@@ -10,12 +10,28 @@ const DEFAULT_SETTINGS = {
 };
 
 browser.runtime.onInstalled.addListener(async (details) => {
-  const { settings } = await browser.storage.local.get("settings");
-  if (!settings) {
+  const state = await browser.storage.local.get([
+    "settings",
+    "watchedItems",
+    "seriesWatched",
+    CPWMStorage.KEYS.aliases,
+    CPWMStorage.KEYS.backups
+  ]);
+
+  if (!state.settings) {
     await browser.storage.local.set({ settings: DEFAULT_SETTINGS });
   }
-  if (!("watchedItems" in (await browser.storage.local.get("watchedItems")))) {
+  if (!state.watchedItems) {
     await browser.storage.local.set({ watchedItems: {} });
+  }
+  if (!state.seriesWatched) {
+    await browser.storage.local.set({ seriesWatched: {} });
+  }
+  if (!state[CPWMStorage.KEYS.aliases]) {
+    await CPWMStorage.repairAliases();
+  }
+  if (!Array.isArray(state[CPWMStorage.KEYS.backups])) {
+    await browser.storage.local.set({ [CPWMStorage.KEYS.backups]: [] });
   }
 });
 
