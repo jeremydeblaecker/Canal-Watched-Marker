@@ -68,16 +68,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(node -p "require('./manifest.json').version")"
-          {
-            echo "# Canal+ Watched Marker v${VERSION}"
-            echo
-            awk -v version="$VERSION" '
-              $0 ~ "^## \\[" version "\\]" { found=1; next }
-              found && /^## \\[/ { exit }
-              found { print }
-            ' CHANGELOG.md
-          } > release-notes.md
+          python - <<'PY'
+          import json
+          import re
+
+          version = json.load(open("manifest.json", encoding="utf-8"))["version"]
+          changelog = open("CHANGELOG.md", encoding="utf-8").read()
+          pattern = rf"^## \[{re.escape(version)}\].*?\n(.*?)(?=^## \[|\Z)"
+          match = re.search(pattern, changelog, flags=re.MULTILINE | re.DOTALL)
+          body = match.group(1).strip() if match else "See CHANGELOG.md for details."
+
+          with open("release-notes.md", "w", encoding="utf-8") as out:
+              out.write(f"# Canal+ Watched Marker v{version}\n\n{body}\n")
+          PY
 
       - name: Publish GitHub release
         env:
