@@ -41,27 +41,27 @@ test("upsertItem relit le stockage avant chaque écriture", async () => {
 });
 
 test("resolveItem utilise un alias uniquement lorsqu'il est non ambigu", async () => {
-  global.browser = createBrowser({
-    watchedItems: {
-      "h:a_1": { watched: true, title: "Same Movie", year: "2020" }
-    },
-    contentAliases: {
-      "title:same movie": ["h:a_1"]
-    }
-  });
+  global.browser = createBrowser({ watchedItems: {}, contentAliases: {} });
   delete require.cache[require.resolve("../storage.js")];
   const Storage = require("../storage.js");
+
+  await Storage.upsertItem("a_1", {
+    watched: true,
+    progress: 1,
+    title: "Same Movie",
+    year: "2020"
+  });
 
   const found = await Storage.resolveItem("unknown", { title: "Same Movie" });
   assert.equal(found.id, "h:a_1");
 
-  await global.browser.storage.local.set({
-    watchedItems: {
-      "h:a_1": { watched: true, title: "Same Movie", year: "2020" },
-      "h:b_2": { watched: true, title: "Same Movie", year: "2021" }
-    },
-    contentAliases: { "title:same movie": ["h:a_1", "h:b_2"] }
+  await Storage.upsertItem("b_2", {
+    watched: true,
+    progress: 1,
+    title: "Same Movie",
+    year: "2021"
   });
+
   const ambiguous = await Storage.resolveItem("unknown", { title: "Same Movie" });
   assert.equal(ambiguous, null);
 });
