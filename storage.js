@@ -9,7 +9,8 @@
     items: "watchedItems",
     series: "seriesWatched",
     aliases: "contentAliases",
-    backups: "storageBackups"
+    backups: "storageBackups",
+    notion: "notionWatched"
   };
 
   function getBrowser() {
@@ -40,14 +41,15 @@
 
   async function snapshot(reason = "manual") {
     const b = getBrowser();
-    const state = await b.storage.local.get([KEYS.items, KEYS.series, KEYS.aliases, KEYS.backups]);
+    const state = await b.storage.local.get([KEYS.items, KEYS.series, KEYS.aliases, KEYS.backups, KEYS.notion]);
     const backups = Array.isArray(state[KEYS.backups]) ? state[KEYS.backups] : [];
     const entry = {
       createdAt: Date.now(),
       reason,
       watchedItems: clone(state[KEYS.items] || {}),
       seriesWatched: clone(state[KEYS.series] || {}),
-      contentAliases: clone(state[KEYS.aliases] || {})
+      contentAliases: clone(state[KEYS.aliases] || {}),
+      notionWatched: clone(state[KEYS.notion] || { movies: [], importedAt: "", sourceName: "" })
     };
     backups.push(entry);
     const trimmed = backups.slice(-5);
