@@ -62,7 +62,11 @@ els.thresholdRange.addEventListener("change", () => {
 
 els.clearHistory.addEventListener("click", async () => {
   if (!confirm("Effacer tout l'historique des programmes vus/en cours ?")) return;
-  await browser.storage.local.set({ watchedItems: {} });
+  await CPWMStorage.snapshot("before-clear-history");
+  await browser.storage.local.set({
+    watchedItems: {},
+    contentAliases: {}
+  });
   await refreshStats();
   browser.runtime.sendMessage({ type: "REFRESH_ACTIVE_TAB" });
 });
