@@ -56,6 +56,10 @@ test("resolveItem utilise un alias uniquement lorsqu'il est non ambigu", async (
   assert.equal(found.id, "h:a_1");
 
   await global.browser.storage.local.set({
+    watchedItems: {
+      "h:a_1": { watched: true, title: "Same Movie", year: "2020" },
+      "h:b_2": { watched: true, title: "Same Movie", year: "2021" }
+    },
     contentAliases: { "title:same movie": ["h:a_1", "h:b_2"] }
   });
   const ambiguous = await Storage.resolveItem("unknown", { title: "Same Movie" });
