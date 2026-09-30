@@ -1,0 +1,106 @@
+name: Release extension
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: startsWith(github.event.head_commit.message, 'release:')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate manifest
+        run: python -m json.tool manifest.json > /dev/null
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in background.js core.js storage.js content.js import.js notion.js popup.js; do
+            node --check "$file"
+          done
+
+      - name: Run unit tests
+        run: node --test tests/*.test.js
+
+      - name: Build AMO package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./manifest.json').version")"
+          PACKAGE_DIR="dist/package"
+
+          rm -rf dist
+          mkdir -p "$PACKAGE_DIR"
+
+          cp manifest.json "$PACKAGE_DIR/"
+          cp background.js core.js storage.js notion.js content.js "$PACKAGE_DIR/"
+          cp content.css "$PACKAGE_DIR/"
+          cp popup.html popup.js popup.css "$PACKAGE_DIR/"
+          cp import.html import.js import.css "$PACKAGE_DIR/"
+          cp -R icons "$PACKAGE_DIR/"
+
+          (
+            cd "$PACKAGE_DIR"
+            zip -r "../Canal-Watched-Marker-v${VERSION}.xpi" . >/dev/null
+          )
+          cp "dist/Canal-Watched-Marker-v${VERSION}.xpi" "dist/Canal-Watched-Marker-v${VERSION}.zip"
+
+      - name: Lint Firefox package
+        run: npx --yes web-ext@latest lint --source-dir dist/package
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./manifest.json').version")"
+          {
+            echo "# Canal+ Watched Marker v${VERSION}"
+            echo
+            awk -v version="$VERSION" '
+              $0 ~ "^## \\[" version "\\]" { found=1; next }
+              found && /^## \\[/ { exit }
+              found { print }
+            ' CHANGELOG.md
+          } > release-notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./manifest.json').version")"
+          TAG="v${VERSION}"
+          XPI="dist/Canal-Watched-Marker-v${VERSION}.xpi"
+          ZIP="dist/Canal-Watched-Marker-v${VERSION}.zip"
+
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$XPI" "$ZIP" --clobber
+          else
+            gh release create "$TAG" "$XPI" "$ZIP" \
+              --title "Canal+ Watched Marker ${TAG}" \
+              --notes-file release-notes.md
+          fi
