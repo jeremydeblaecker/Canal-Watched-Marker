@@ -3,23 +3,9 @@
   let current = { movies: [], importedAt: "", sourceName: "" };
   let index = new Map();
 
-  const stripDiacritics = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const normalizeTitle = value => stripDiacritics(value)
-    .toLocaleLowerCase("fr")
-    .replace(/&/g, " et ")
-    .replace(/[’'`´]/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(?:film|movie)\b$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const cleanupPlatformTitle = value => String(value || "")
-    .replace(/\s*[|–—-]\s*(?:Netflix|Disney\+|Prime Video|Amazon Prime Video|CANAL\+|myCANAL).*$/i, "")
-    .replace(/^(?:Prime Video|Netflix|Disney\+|CANAL\+|myCANAL)\s*[:|-]\s*/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const extractYear = value => String(value || "").match(/(?:19|20)\d{2}/)?.[0] || "";
+  const normalizeTitle = CPWMCore.normalizeTitle;
+  const cleanupPlatformTitle = CPWMCore.cleanupPlatformTitle;
+  const extractYear = CPWMCore.extractYear;
 
   function rebuild() {
     index = new Map();
@@ -136,6 +122,9 @@
   }
 
   async function replace(payload) {
+    if (globalThis.CPWMStorage?.snapshot) {
+      await CPWMStorage.snapshot("before-notion-import");
+    }
     const unique = new Map();
     for (const movie of payload.movies || []) {
       const key = `${normalizeTitle(movie.title)}|${normalizeTitle(movie.originalTitle)}|${movie.year || ""}`;

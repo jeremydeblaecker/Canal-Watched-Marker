@@ -23,31 +23,21 @@ fileInput.addEventListener("change", async () => {
     const parsed = parsePayload(json);
     if (!parsed.length) throw new Error(`Aucun élément ${PLATFORM} compatible trouvé dans ce fichier.`);
 
-    const current = await browser.storage.local.get(["watchedItems", "seriesWatched"]);
-    const watchedItems = { ...(current.watchedItems || {}) };
-    const seriesWatched = { ...(current.seriesWatched || {}) };
-    let added = 0, updated = 0;
+    const result = await CPWMStorage.mergeImportedRecords(parsed, {
+      backupReason: "before-json-import"
+    });
 
-    for (const record of parsed) {
-      const target = record.type === "series" ? seriesWatched : watchedItems;
-      const existing = target[record.key];
-      const incoming = record.value;
-      if (!existing) {
-        target[record.key] = incoming;
-        added++;
-      } else if ((Number(incoming.updatedAt) || 0) >= (Number(existing.updatedAt) || 0)) {
-        target[record.key] = { ...existing, ...incoming };
-        updated++;
-      }
-    }
-
-    await browser.storage.local.set({ watchedItems, seriesWatched });
     const verified = await browser.storage.local.get(["watchedItems", "seriesWatched"]);
-    const missing = parsed.filter(r => !(r.key in (r.type === "series" ? (verified.seriesWatched || {}) : (verified.watchedItems || {}))));
+    const missing = parsed.filter(record => {
+      const target = record.type === "series" ? (verified.seriesWatched || {}) : (verified.watchedItems || {});
+      const key = record.type === "series"
+        ? record.key
+        : CPWMCore.normalizeCanalContentKey(record.key);
+      return !(key in target);
+    });
     if (missing.length) throw new Error(`${missing.length} élément(s) n'ont pas été sauvegardés.`);
 
-    const storedCount = Object.keys(verified.watchedItems || {}).length + Object.keys(verified.seriesWatched || {}).length;
-    showCounts(parsed.length, added, updated, storedCount);
+    showCounts(parsed.length, result.added, result.updated, result.stored);
     statusEl.className = "status ok";
     statusEl.textContent = `Import terminé : ${parsed.length} élément(s) compatible(s) traité(s).`;
     try { await browser.runtime.sendMessage({ type: "REFRESH_ACTIVE_TAB" }); } catch (_) {}
@@ -126,15 +116,8 @@ function normalizeId(rawKey, item) {
 }
 
 function normalizeContentKey(id) {
+  if (PLATFORM === "canalplus") return CPWMCore.normalizeCanalContentKey(id);
   if (/^(?:path|raw|h|id):/i.test(id)) return normalizeSpecial(id);
-  if (PLATFORM === "canalplus") {
-    // Les exports de migration Canal+ contiennent généralement l'identifiant
-    // technique sans le préfixe utilisé par le content script. Une URL telle
-    // que /h/43019292_50889 est indexée localement sous h:43019292_50889.
-    if (/^[a-zA-Z0-9_-]+_[a-zA-Z0-9_-]+$/.test(id)) return `h:${id}`;
-    if (/^\d{4,}$/.test(id)) return `id:${id}`;
-    return id;
-  }
   if (PLATFORM === "netflix") return `netflix:${id.replace(/^netflix:/i, "")}`;
   if (PLATFORM === "primevideo") return `prime:${id.replace(/^(?:primevideo|prime):/i, "").toUpperCase()}`;
   if (PLATFORM === "disneyplus") return `disney:${id.replace(/^(?:disneyplus|disney):/i, "").toLowerCase()}`;
@@ -149,10 +132,7 @@ function normalizeSpecial(id) {
 }
 function normalizeSeriesKey(id) { return id.startsWith("series:") ? id : `series:${id}`; }
 function normalizeProgress(value, watched, status) {
-  if (watched === true || status === "watched") return 1;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(1, n > 1 ? n / 100 : n));
+  return CPWMCore.normalizeProgress(value, watched, status);
 }
 function deduplicate(records) {
   const map = new Map();

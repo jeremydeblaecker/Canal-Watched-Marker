@@ -62,23 +62,17 @@ els.thresholdRange.addEventListener("change", () => {
 
 els.clearHistory.addEventListener("click", async () => {
   if (!confirm("Effacer tout l'historique des programmes vus/en cours ?")) return;
-  await browser.storage.local.set({ watchedItems: {} });
+  await CPWMStorage.snapshot("before-clear-history");
+  await browser.storage.local.set({
+    watchedItems: {},
+    contentAliases: {}
+  });
   await refreshStats();
   browser.runtime.sendMessage({ type: "REFRESH_ACTIVE_TAB" });
 });
 
 function extractContentId(rawUrl) {
-  try {
-    const u = new URL(rawUrl);
-    const path = u.pathname.replace(/\/+$/, "");
-    const hMatch = path.match(/\/h\/([a-zA-Z0-9_-]+)/);
-    if (hMatch) return `h:${hMatch[1]}`;
-    const idMatch = path.match(/\/(\d{4,})(?:[/?]|$)/);
-    if (idMatch) return `id:${idMatch[1]}`;
-    return `path:${path}`;
-  } catch {
-    return `raw:${rawUrl}`;
-  }
+  return CPWMCore.extractContentId(rawUrl);
 }
 
 const markBtn = document.getElementById("markCurrentWatched");
@@ -89,16 +83,12 @@ markBtn.addEventListener("click", async () => {
     return;
   }
   const id = extractContentId(tab.url);
-  const { watchedItems = {} } = await browser.storage.local.get("watchedItems");
-  watchedItems[id] = {
-    ...(watchedItems[id] || {}),
+  await CPWMStorage.upsertItem(id, {
     watched: true,
     progress: 1,
     title: tab.title || "",
-    url: tab.url,
-    updatedAt: Date.now()
-  };
-  await browser.storage.local.set({ watchedItems });
+    url: tab.url
+  });
   await refreshStats();
   browser.runtime.sendMessage({ type: "REFRESH_ACTIVE_TAB" });
   markBtn.textContent = "Marqué ✓ — rechargez la page catalogue";

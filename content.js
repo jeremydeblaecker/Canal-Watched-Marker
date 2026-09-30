@@ -30,6 +30,7 @@
   let settings = { enabled: true, watchedThreshold: 0.9, showProgressBar: true, hideWatched: false };
   let watchedCache = {};
   let seriesWatched = {};
+  let contentAliases = {};
   let lastSaveAt = 0;
   let currentVideoId = null;
   let videoPollTimer = null;
@@ -55,20 +56,7 @@
    *  - fallback : chemin complet nettoyé des query params
    */
   function extractContentId(rawUrl) {
-    try {
-      const u = new URL(rawUrl, location.origin);
-      const path = u.pathname.replace(/\/+$/, "");
-
-      const hMatch = path.match(/\/h\/([a-zA-Z0-9_-]+)/);
-      if (hMatch) return `h:${hMatch[1]}`;
-
-      const idMatch = path.match(/\/(\d{4,})(?:[/?]|$)/);
-      if (idMatch) return `id:${idMatch[1]}`;
-
-      return `path:${path}`;
-    } catch {
-      return `raw:${rawUrl}`;
-    }
+    return CPWMCore.extractContentId(rawUrl, location.origin);
   }
 
   function isContentLink(href) {
@@ -91,19 +79,12 @@
    * équivalente à l'ID unique), sans effet indésirable.
    */
   function extractSeriesId(rawUrl) {
-    try {
-      const u = new URL(rawUrl, location.origin);
-      const parts = u.pathname.split("/").filter(Boolean);
-      if (parts.length >= 2) return `series:${parts[0]}:${parts[1]}`;
-      return null;
-    } catch {
-      return null;
-    }
+    return CPWMCore.extractSeriesId(rawUrl, location.origin);
   }
 
   /** Détecte si une URL ressemble à un épisode (saison/épisode) plutôt qu'à un film unique. */
   function isEpisodeUrl(rawUrl) {
-    return /saison|season|episode|\/s\d+\/e\d+|\/s\d+e\d+/i.test(rawUrl);
+    return CPWMCore.isEpisodeUrl(rawUrl);
   }
 
   // ---------------------------------------------------------------------
@@ -111,21 +92,36 @@
   // ---------------------------------------------------------------------
 
   async function loadState() {
-    const data = await browser.storage.local.get([STORAGE_KEY, SERIES_KEY, SETTINGS_KEY]);
+    const data = await browser.storage.local.get([STORAGE_KEY, SERIES_KEY, SETTINGS_KEY, CPWMStorage.KEYS.aliases]);
     watchedCache = data[STORAGE_KEY] || {};
     seriesWatched = data[SERIES_KEY] || {};
+    contentAliases = data[CPWMStorage.KEYS.aliases] || {};
     settings = { ...settings, ...(data[SETTINGS_KEY] || {}) };
     applyHideWatchedClass();
   }
 
   async function saveWatchedItem(id, patch) {
-    watchedCache[id] = { ...(watchedCache[id] || {}), ...patch, updatedAt: Date.now() };
-    await browser.storage.local.set({ [STORAGE_KEY]: watchedCache });
+    const canonicalId = CPWMCore.normalizeCanalContentKey(id);
+    const saved = await CPWMStorage.upsertItem(canonicalId, patch, patch);
+    watchedCache[canonicalId] = saved;
+    return saved;
   }
 
   async function saveSeriesWatched(seriesId, watched) {
-    seriesWatched[seriesId] = { watched, updatedAt: Date.now() };
-    await browser.storage.local.set({ [SERIES_KEY]: seriesWatched });
+    const saved = await CPWMStorage.upsertSeries(seriesId, { watched });
+    seriesWatched[seriesId] = saved;
+    return saved;
+  }
+
+  function resolveCachedEntry(id, meta = {}) {
+    const canonicalId = CPWMCore.normalizeCanalContentKey(id);
+    if (watchedCache[canonicalId] !== undefined) return watchedCache[canonicalId];
+
+    for (const alias of CPWMCore.buildContentAliases(meta)) {
+      const ids = (contentAliases[alias] || []).filter(candidate => watchedCache[candidate] !== undefined);
+      if (ids.length === 1) return watchedCache[ids[0]];
+    }
+    return undefined;
   }
 
   function applyHideWatchedClass() {
@@ -140,6 +136,10 @@
     }
     if (changes[SERIES_KEY]) {
       seriesWatched = changes[SERIES_KEY].newValue || {};
+      scheduleScan();
+    }
+    if (changes[CPWMStorage.KEYS.aliases]) {
+      contentAliases = changes[CPWMStorage.KEYS.aliases].newValue || {};
       scheduleScan();
     }
     if (changes[SETTINGS_KEY]) {
@@ -479,11 +479,12 @@
       const id = extractContentId(absHref);
       const seriesId = extractSeriesId(absHref);
       const episodeLike = isEpisodeUrl(absHref);
-      const directEntry = watchedCache[id];
       const seriesEntry = seriesId ? seriesWatched[seriesId] : null;
       const card = findCardElement(a, visual);
       if (!card) return;
-      const notionMatch = NotionWatched.match(getCardTitle(a, card));
+      const cardTitle = getCardTitle(a, card);
+      const directEntry = resolveCachedEntry(id, { id, title: cardTitle });
+      const notionMatch = NotionWatched.match(cardTitle);
       const notionEntry = notionMatch ? { watched: true, progress: 1, source: "notion" } : null;
       // Un marquage explicite sur l'épisode prime toujours sur le repli "série entière".
       const effectiveEntry = directEntry !== undefined
@@ -548,7 +549,7 @@
   // ---------------------------------------------------------------------
 
   (async function init() {
-    log("Content script v1.5.4 chargé sur", location.href);
+    log("Content script v1.6.0 chargé sur", location.href);
     await loadState();
     await NotionWatched.load();
     log("Réglages :", settings, "| Contenus déjà en mémoire :", Object.keys(watchedCache).length);
@@ -556,23 +557,18 @@
     pollForVideoElement();
     trackUrlChanges();
     observeDom();
-    window.addEventListener("beforeunload", () => {
+    window.addEventListener("pagehide", () => {
       const videoEl = document.querySelector("video");
-      if (videoEl && videoEl.duration) {
-        const id = currentVideoId || extractContentId(location.href);
-        const progress = Math.min(1, videoEl.currentTime / videoEl.duration);
-        navigator.sendBeacon && browser.storage.local.set({
-          [STORAGE_KEY]: {
-            ...watchedCache,
-            [id]: {
-              ...(watchedCache[id] || {}),
-              progress,
-              watched: progress >= settings.watchedThreshold || !!(watchedCache[id] && watchedCache[id].watched),
-              updatedAt: Date.now()
-            }
-          }
-        });
-      }
+      if (!videoEl || !videoEl.duration) return;
+      const id = currentVideoId || extractContentId(location.href);
+      const progress = Math.min(1, videoEl.currentTime / videoEl.duration);
+      // Best effort uniquement : surtout, ne réécrit plus un cache complet potentiellement périmé.
+      CPWMStorage.upsertItem(id, {
+        progress,
+        watched: progress >= settings.watchedThreshold || !!(watchedCache[id] && watchedCache[id].watched),
+        title: document.title.replace(/\s*\|\s*CANAL\+.*/i, "").trim(),
+        url: location.href
+      }).catch(() => {});
     });
   })();
 })();
