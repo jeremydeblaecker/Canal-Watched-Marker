@@ -1,5 +1,7 @@
 # Canal+ Watched Marker
 
+<img width="1915" height="850" alt="image" src="https://github.com/user-attachments/assets/97bff443-2fe2-4085-a175-8da394d610a5" />
+
 Extension Chrome (Manifest V3) qui marque automatiquement les programmes déjà
 regardés sur **canalplus.com** / **mycanal.fr**, sur le même principe que
 *Netflix Watched Marker* ou *Disney Plus Watched Marker* :
