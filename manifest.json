@@ -32,6 +32,8 @@
   ],
   "background": {
     "scripts": [
+      "core.js",
+      "storage.js",
       "background.js"
     ]
   },
