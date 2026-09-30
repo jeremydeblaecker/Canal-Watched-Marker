@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "Canal+ Watched Marker",
+  "version": "1.5.4",
+  "description": "Marque automatiquement les programmes déjà regardés sur Canal+ / myCanal. Import des films vus depuis Notion (CSV/JSON).",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.canalplus.com/*",
+    "*://*.mycanal.fr/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.canalplus.com/*",
+        "*://*.mycanal.fr/*"
+      ],
+      "js": [
+        "notion.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Canal+ Watched Marker",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "canalplus-watched-marker@jeremy.local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}
