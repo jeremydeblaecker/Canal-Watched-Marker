@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Canal+ Watched Marker",
-  "version": "1.5.4",
+  "version": "1.6.0",
   "description": "Marque automatiquement les programmes déjà regardés sur Canal+ / myCanal. Import des films vus depuis Notion (CSV/JSON).",
   "permissions": [
     "storage",
@@ -18,6 +18,8 @@
         "*://*.mycanal.fr/*"
       ],
       "js": [
+        "core.js",
+        "storage.js",
         "notion.js",
         "content.js"
       ],
